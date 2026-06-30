@@ -1,0 +1,193 @@
+{
+  "_comment": "Bot-wide defaults. Per-guild overrides (toggles, thresholds, log channel, blocklist, allowlist) live in the SQLite DB and take precedence. Edit the pattern lists below to tune detection; restart the bot to apply changes here.",
+
+  "defaultLogChannelId": "1516971063173447790",
+
+  "gate": {
+    "_comment": "Who may run the moderation slash commands. A member passes if they are a server Administrator, hold Manage Server, have a role whose NAME matches one of roleNames (case-insensitive), or have a role whose ID is in roleIds.",
+    "roleNames": ["Owner", "Co-Owner", "Co Owner", "Coowner", "Staff"],
+    "roleIds": []
+  },
+
+  "availability": {
+    "_comment": "Auto-replies with an availability card when the owner (userId) is pinged. Once per channel per day, resets daily or via /availability reset. timezone is an IANA name like 'America/New_York'; leave blank to use the host's local time. startHour/endHour are 24h; days are 0=Sun..6=Sat.",
+    "enabled": true,
+    "userId": "1285709253075537922",
+    "timezone": "America/Los_Angeles",
+    "workHours": { "days": [1, 2, 3, 4, 5], "startHour": 8, "endHour": 18 },
+    "workHoursLabel": "Mon–Fri 8AM – 6PM"
+  },
+
+  "modules": {
+    "wordFilter": true,
+    "solicitation": true,
+    "linkFilter": true,
+    "inviteFilter": true,
+    "antiSpam": true,
+    "antiMention": true,
+    "antiCaps": true,
+    "antiRaid": true,
+    "accountAge": true,
+    "duplicate": true,
+    "zalgo": true,
+    "advisory": true
+  },
+
+  "thresholds": {
+    "spamMessages": 5,
+    "spamWindowSeconds": 5,
+    "mentionLimit": 5,
+    "capsPercent": 70,
+    "capsMinLength": 12,
+    "accountAgeDays": 7,
+    "raidJoinCount": 8,
+    "raidWindowSeconds": 30,
+    "duplicateChannels": 3,
+    "duplicateWindowSeconds": 60,
+    "zalgoCombiningRatio": 0.35,
+    "zalgoMinCombining": 6
+  },
+
+  "timeouts": {
+    "strike2Seconds": 600,
+    "strike3Seconds": 3600
+  },
+
+  "strikeDecayDays": 30,
+
+  "_advisoryComment": "Terms that trigger a friendly reminder (NO deletion, NO strike) nudging the user to type the real word. Map each term to a suggestion shown in the nudge. Rate-limited per user.",
+  "advisoryTerms": {
+    "fn": "Fortnite or function"
+  },
+
+  "accountAgeAction": "flag",
+
+  "allowedLinkDomains": [
+    "tenor.com",
+    "media.tenor.com",
+    "giphy.com",
+    "media.giphy.com",
+    "cdn.discordapp.com",
+    "media.discordapp.net",
+    "images-ext-1.discordapp.net",
+    "images-ext-2.discordapp.net"
+  ],
+
+  "invitePatterns": [
+    "discord\\.gg/",
+    "discord\\.com/invite/",
+    "discordapp\\.com/invite/",
+    "discord\\.me/",
+    "dsc\\.gg/",
+    "invite\\.gg/",
+    "disco\\.gg/",
+    "discord\\.io/",
+    "discord\\.li/",
+    "discordservers\\.com/"
+  ],
+
+  "scamPatterns": [
+    "free\\s*nitro",
+    "free\\s*discord\\s*nitro",
+    "nitro\\s*giveaway",
+    "steamcommunity\\.com/gift",
+    "free\\s*robux",
+    "free\\s*v[-\\s]?bucks",
+    "click\\s*here\\s*to\\s*claim",
+    "claim\\s*your\\s*free",
+    "airdrop",
+    "crypto\\s*giveaway",
+    "verify\\s*your\\s*account\\s*here",
+    "@everyone\\s*free"
+  ],
+
+  "nsfwDomains": [
+    "pornhub.com",
+    "xvideos.com",
+    "xnxx.com",
+    "onlyfans.com",
+    "fansly.com",
+    "redtube.com",
+    "xhamster.com",
+    "rule34.xxx",
+    "e621.net"
+  ],
+
+  "solicitationPatterns": [
+    "check my bio",
+    "check out my bio",
+    "in my bio",
+    "link in bio",
+    "dm me",
+    "dms open",
+    "hit me up",
+    "add my snap",
+    "add my snapchat",
+    "add me on snap",
+    "my snap is",
+    "add my insta",
+    "add my telegram",
+    "my telegram",
+    "join my of",
+    "my onlyfans",
+    "selling content",
+    "selling nudes",
+    "selling pics",
+    "buy my content",
+    "f4f",
+    "18 plus content",
+    "nsfw content",
+    "leaked nudes",
+    "free nudes",
+    "send nudes",
+    "horny dm",
+    "sexting",
+    "sext me"
+  ],
+
+  "blocklist": {
+    "_comment": "Default blocklist applied to EVERY guild. 'slurs' are redacted in the log channel ([redacted - contained slur]); 'general' show the captured content. Admins ADD guild-specific terms with /blocklist add (stored in the DB). These defaults are always active.",
+    "slurs": [
+      "nigger",
+      "nigga",
+      "niggers",
+      "niga",
+      "nga",
+      "nibba",
+      "nibber",
+      "niqqa",
+      "nig",
+      "ngr",
+      "nword",
+      "faggot",
+      "faggots",
+      "fag",
+      "fags",
+      "fgt",
+      "retard",
+      "retarded",
+      "tard",
+      "chink",
+      "spic",
+      "kike",
+      "wetback",
+      "gook",
+      "coon",
+      "beaner",
+      "tranny",
+      "trannies",
+      "dyke",
+      "raghead",
+      "sandnigger",
+      "porchmonkey",
+      "jigaboo",
+      "groid",
+      "negro",
+      "paki",
+      "wop",
+      "gypo",
+      "shemale"
+    ],
+    "general": []
+  }
+}

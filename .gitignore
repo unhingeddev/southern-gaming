@@ -1,0 +1,24 @@
+# Secrets — NEVER commit these
+.env
+*.env
+!.env.example
+
+# Database / persistent storage
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
