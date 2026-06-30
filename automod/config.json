@@ -10,12 +10,24 @@
   },
 
   "availability": {
-    "_comment": "Auto-replies with an availability card when the owner (userId) is pinged. Once per channel per day, resets daily or via /availability reset. timezone is an IANA name like 'America/New_York'; leave blank to use the host's local time. startHour/endHour are 24h; days are 0=Sun..6=Sat.",
+    "_comment": "Auto-replies with an availability card when a tracked person is pinged. Each person has their OWN IANA timezone (e.g. 'America/Los_Angeles' = PDT/PST, 'America/Chicago' = CDT/CST) so DST is handled automatically. Once per channel per person per day (resets daily or via /availability reset). startHour/endHour are 24h; days are 0=Sun..6=Sat. Use /availability testmode to test (lifts the daily limit and lets a tracked person ping themselves).",
     "enabled": true,
-    "userId": "1285709253075537922",
-    "timezone": "America/Los_Angeles",
-    "workHours": { "days": [1, 2, 3, 4, 5], "startHour": 8, "endHour": 18 },
-    "workHoursLabel": "Mon–Fri 8AM – 6PM"
+    "people": [
+      {
+        "userId": "1285709253075537922",
+        "name": "Owner (PDT)",
+        "timezone": "America/Los_Angeles",
+        "workHours": { "days": [1, 2, 3, 4, 5], "startHour": 8, "endHour": 18 },
+        "workHoursLabel": "Mon–Fri 8AM – 6PM (Pacific)"
+      },
+      {
+        "userId": "832767315950436433",
+        "name": "Texas (CDT)",
+        "timezone": "America/Chicago",
+        "workHours": { "days": [1, 2, 3, 4, 5], "startHour": 8, "endHour": 18 },
+        "workHoursLabel": "Mon–Fri 8AM – 6PM (Central)"
+      }
+    ]
   },
 
   "modules": {
