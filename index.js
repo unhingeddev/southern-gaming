@@ -59,7 +59,7 @@ async function startWith(intents) {
 }
 
 async function main() {
-  logger.info('Starting MR. Assistant (AIO) bot…');
+  logger.info('Starting Southern Gaming bot…');
 
   let started = false;
   let lastErr;

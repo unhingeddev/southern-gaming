@@ -11,7 +11,7 @@ export default {
     .setDMPermission(false),
 
   async execute(interaction) {
-    const embed = Embeds.info('🤖 SellAuth Bot — Help', 'Here is everything I can do.')
+    const embed = Embeds.info('🎮 Southern Gaming — Help', 'Here is everything I can do.')
       .setColor(COLORS.brand)
       .addFields(
         {

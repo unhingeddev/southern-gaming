@@ -1,7 +1,7 @@
 {
-  "name": "sellauth-discord-bot",
+  "name": "southern-gaming-bot",
   "version": "1.0.0",
-  "description": "Production-ready Discord bot integrating with the SellAuth API (vouches, purchases, automation, channel cleanup).",
+  "description": "Southern Gaming Discord bot — AIO (SellAuth, tickets + transcripts, automod, moderation, giveaways).",
   "type": "module",
   "main": "index.js",
   "engines": {
