@@ -6,10 +6,10 @@
 // Controlled by config.bot.autoRegisterOnJoin (env AUTO_REGISTER_ON_JOIN). Turn
 // it off if you register commands globally, so they don't appear twice.
 
-import { Events, REST, Routes } from 'discord.js';
+import { Events } from 'discord.js';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
-import { collectCommandData } from '../handlers/commandHandler.js';
+import { registerGuildCommands } from '../handlers/commandHandler.js';
 
 export default {
   name: Events.GuildCreate,
@@ -24,10 +24,8 @@ export default {
     if (!config.bot.autoRegisterOnJoin) return;
 
     try {
-      const body = collectCommandData(ctx.client.commands);
-      const rest = new REST({ version: '10' }).setToken(config.discord.token);
-      await rest.put(Routes.applicationGuildCommands(config.discord.clientId, guild.id), { body });
-      logger.info(`Auto-registered ${body.length} command(s) to new guild ${guild.id}.`);
+      const n = await registerGuildCommands(ctx.client, guild.id);
+      logger.info(`Auto-registered ${n} command(s) to new guild ${guild.id}.`);
     } catch (err) {
       logger.warn(`Failed to auto-register commands for guild ${guild.id}: ${err.message}`);
     }

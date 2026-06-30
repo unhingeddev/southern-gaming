@@ -2,7 +2,9 @@
 // Fired once when the bot has logged in. Sets presence and starts automation.
 
 import { Events } from 'discord.js';
+import config from '../config/config.js';
 import logger from '../utils/logger.js';
+import { syncAllGuildCommands } from '../handlers/commandHandler.js';
 import { startAutomation } from '../services/automation.js';
 import { startStatusRotation } from '../services/statusRotator.js';
 import { startTicketSweeper } from '../services/ticketSweeper.js';
@@ -15,8 +17,14 @@ export default {
    * @param {import('discord.js').Client} client
    * @param {object} ctx
    */
-  execute(client, ctx) {
+  async execute(client, ctx) {
     logger.info(`Logged in as ${client.user.tag} (serving ${client.guilds.cache.size} guild(s)).`);
+
+    // Make sure every server's slash commands are registered & up to date. This
+    // is why commands "show up" — loading them isn't enough; Discord must be told.
+    if (config.bot.autoRegisterOnJoin) {
+      await syncAllGuildCommands(client);
+    }
 
     // Begin rotating presence/statuses (managed via /statusadd).
     startStatusRotation(client);
