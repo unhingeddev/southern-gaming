@@ -179,6 +179,21 @@ ensureColumn('embed_templates', 'created_by', `created_by TEXT NOT NULL DEFAULT 
 ensureColumn('embed_templates', 'created_at', `created_at INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('embed_templates', 'updated_at', `updated_at INTEGER NOT NULL DEFAULT 0`);
 
+// A legacy embed manager called the payload column `embed_json` and made it
+// NOT NULL. Preserve those templates and keep both columns synchronized on
+// servers that still have that historical schema.
+const embedTemplateColumns = new Set(
+  db.prepare('PRAGMA table_info(embed_templates)').all().map((column) => column.name)
+);
+const hasLegacyEmbedJson = embedTemplateColumns.has('embed_json');
+if (hasLegacyEmbedJson) {
+  db.exec(`
+    UPDATE embed_templates
+    SET data_json = embed_json
+    WHERE embed_json IS NOT NULL AND (data_json IS NULL OR data_json = '{}')
+  `);
+}
+
 // ── Prepared statements ──────────────────────────────────────────────────────
 const stmts = {
   upsertGuild: db.prepare(`
@@ -306,13 +321,18 @@ const stmts = {
   countGiveawayEntries: db.prepare(`SELECT COUNT(*) AS n FROM giveaway_entries WHERE giveaway_id = ?`),
   getGiveawayEntries: db.prepare(`SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?`),
 
-  updateEmbedTemplate: db.prepare(`
-    UPDATE embed_templates SET data_json = ?, created_by = ?, updated_at = strftime('%s','now')
-    WHERE guild_id = ? AND name = ? COLLATE NOCASE
-  `),
-  insertEmbedTemplate: db.prepare(`
-    INSERT INTO embed_templates (guild_id, name, data_json, created_by) VALUES (?, ?, ?, ?)
-  `),
+  updateEmbedTemplate: db.prepare(
+    hasLegacyEmbedJson
+      ? `UPDATE embed_templates SET data_json = ?, embed_json = ?, created_by = ?, updated_at = strftime('%s','now')
+         WHERE guild_id = ? AND name = ? COLLATE NOCASE`
+      : `UPDATE embed_templates SET data_json = ?, created_by = ?, updated_at = strftime('%s','now')
+         WHERE guild_id = ? AND name = ? COLLATE NOCASE`
+  ),
+  insertEmbedTemplate: db.prepare(
+    hasLegacyEmbedJson
+      ? `INSERT INTO embed_templates (guild_id, name, data_json, embed_json, created_by) VALUES (?, ?, ?, ?, ?)`
+      : `INSERT INTO embed_templates (guild_id, name, data_json, created_by) VALUES (?, ?, ?, ?)`
+  ),
   getEmbedTemplate: db.prepare(`SELECT * FROM embed_templates WHERE id = ? AND guild_id = ?`),
   getEmbedTemplates: db.prepare(`SELECT * FROM embed_templates WHERE guild_id = ? ORDER BY name LIMIT 25`),
   deleteEmbedTemplate: db.prepare(`DELETE FROM embed_templates WHERE id = ? AND guild_id = ?`),
@@ -578,8 +598,13 @@ export const Store = {
   // Reusable embed templates (guild-scoped).
   saveEmbedTemplate(guildId, name, data, userId) {
     const json = JSON.stringify(data);
-    const updated = stmts.updateEmbedTemplate.run(json, userId, guildId, name);
-    if (updated.changes === 0) stmts.insertEmbedTemplate.run(guildId, name, json, userId);
+    const updated = hasLegacyEmbedJson
+      ? stmts.updateEmbedTemplate.run(json, json, userId, guildId, name)
+      : stmts.updateEmbedTemplate.run(json, userId, guildId, name);
+    if (updated.changes === 0) {
+      if (hasLegacyEmbedJson) stmts.insertEmbedTemplate.run(guildId, name, json, json, userId);
+      else stmts.insertEmbedTemplate.run(guildId, name, json, userId);
+    }
   },
   getEmbedTemplate(guildId, id) {
     const row = stmts.getEmbedTemplate.get(id, guildId);
