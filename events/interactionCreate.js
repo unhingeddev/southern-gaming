@@ -10,6 +10,11 @@ import { checkCooldown } from '../utils/cooldowns.js';
 import config from '../config/config.js';
 import { openTicket, closeTicket, claimTicket, openTicketFromSelect } from '../services/tickets.js';
 import { handleEnter, ENTER_PREFIX } from '../services/giveaways.js';
+import {
+  handleScheduledCloseButton,
+  TICKET_CLOSE_CONFIRM,
+  TICKET_CLOSE_KEEP,
+} from '../services/ticketSweeper.js';
 
 // Persistent ticket buttons → their handlers. These have no message collector,
 // so they're dispatched here and keep working across bot restarts.
@@ -19,6 +24,8 @@ const TICKET_BUTTONS = {
   'ticket-open': (i) => openTicket(i),
   'ticket-close': (i) => closeTicket(i),
   'ticket-claim': (i) => claimTicket(i),
+  [TICKET_CLOSE_CONFIRM]: (i) => handleScheduledCloseButton(i),
+  [TICKET_CLOSE_KEEP]: (i) => handleScheduledCloseButton(i),
 };
 
 export default {

@@ -2,7 +2,7 @@
 // Periodic sweeper that powers delayed/auto ticket closing. Runs every minute and:
 //   • closes any ticket whose scheduled close_at time has passed,
 //   • cancels an inactivity close if the member became active again,
-//   • flags inactive tickets for closure (with a 5-minute warning that pings the
+//   • flags inactive tickets for closure (with a 15-minute warning that pings the
 //     opener) once they exceed the guild's inactivity window.
 //
 // Using a stored close_at timestamp + a sweeper (instead of setTimeout) means
@@ -12,14 +12,45 @@ import { Store } from '../database/db.js';
 import Embeds, { COLORS } from '../utils/embeds.js';
 import { saveTranscript } from './transcripts.js';
 import logger from '../utils/logger.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  PermissionFlagsBits,
+} from 'discord.js';
 
-const WARN_SECONDS = 5 * 60; // 5-minute grace period before a close
+const WARN_SECONDS = 15 * 60; // 15-minute grace period before a close
 const SWEEP_MS = 60 * 1000;
+export const TICKET_CLOSE_CONFIRM = 'ticket-scheduled-close-confirm';
+export const TICKET_CLOSE_KEEP = 'ticket-scheduled-close-keep';
 
 let timer = null;
 let running = false;
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+function closeDecisionButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(TICKET_CLOSE_CONFIRM)
+      .setLabel('Confirm Close')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(TICKET_CLOSE_KEEP)
+      .setLabel('Keep Open')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+  );
+}
+
+function canDecide(interaction, ticket) {
+  if (interaction.user.id === ticket.opener_id) return true;
+  if (interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) return true;
+  const settings = Store.getGuild(interaction.guildId);
+  return Boolean(settings?.support_role_id && interaction.member?.roles?.cache?.has(settings.support_role_id));
+}
 
 /** Post a small log line to the guild's audit log channel, if one is set. */
 async function logToGuild(client, guildId, embed) {
@@ -51,6 +82,40 @@ async function performClose(client, ticket, channel) {
   );
   setTimeout(() => channel.delete(`Ticket auto-close: ${why}`).catch(() => {}), 3000);
   logger.info(`[${ticket.guild_id}] Auto-closed ticket #${ticket.number} (${why}).`);
+}
+
+/** Handle the persistent Confirm Close / Keep Open warning buttons. */
+export async function handleScheduledCloseButton(interaction) {
+  const ticket = Store.getTicketByChannel(interaction.channelId);
+  if (!ticket || ticket.status !== 'open' || !ticket.close_at) {
+    return interaction.reply({
+      embeds: [Embeds.info('No close pending', 'This ticket is no longer scheduled to close.')],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  if (!canDecide(interaction, ticket)) {
+    return interaction.reply({
+      embeds: [Embeds.error('Not allowed', 'Only the ticket opener or support staff can choose this.')],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  if (interaction.customId === TICKET_CLOSE_KEEP) {
+    Store.cancelTicketClose(ticket.channel_id);
+    Store.touchTicketActivity(ticket.channel_id);
+    return interaction.update({
+      content: `<@${ticket.opener_id}>`,
+      embeds: [Embeds.success('Ticket kept open', `Kept open by <@${interaction.user.id}>. The inactivity timer has been reset.`)],
+      components: [],
+    });
+  }
+
+  await interaction.update({
+    content: `<@${ticket.opener_id}>`,
+    embeds: [Embeds.warning('Closing confirmed', `Confirmed by <@${interaction.user.id}>. Closing now…`)],
+    components: [],
+  });
+  return performClose(interaction.client, ticket, interaction.channel);
 }
 
 /** One sweep across all open tickets. */
@@ -94,10 +159,11 @@ async function sweepOnce(client) {
               embeds: [
                 Embeds.warning(
                   '⏳ Inactivity warning',
-                  'This ticket has been inactive and will be **closed in 5 minutes**.\n' +
-                    'Send a message here if you still need help.'
+                  'This ticket has been inactive and will be **closed in 15 minutes**.\n' +
+                    'Choose **Confirm Close** or **Keep Open** below. Sending a message also keeps it open.'
                 ),
               ],
+              components: [closeDecisionButtons()],
             })
             .catch(() => {});
           logger.info(`[${t.guild_id}] Ticket #${t.number} flagged for inactivity close.`);
@@ -112,7 +178,7 @@ async function sweepOnce(client) {
 }
 
 /**
- * Schedule ALL open tickets in a guild to close in 5 minutes, pinging each
+ * Schedule ALL open tickets in a guild to close in 15 minutes, pinging each
  * opener. Returns the number of tickets scheduled.
  * @param {import('discord.js').Client} client
  * @param {string} guildId
@@ -129,10 +195,12 @@ export async function scheduleBulkClose(client, guildId) {
           content: `<@${t.opener_id}>`,
           embeds: [
             Embeds.warning(
-              '⚠️ Ticket closing in 5 minutes',
-              'Staff are closing all open tickets. This channel will be **closed in 5 minutes**.',
+              '⚠️ Ticket closing in 15 minutes',
+              'Staff are closing open tickets. This channel will be **closed in 15 minutes**.\n' +
+                'Choose **Confirm Close** or **Keep Open** below.',
             ),
           ],
+          components: [closeDecisionButtons()],
         });
       }
     } catch {

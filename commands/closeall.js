@@ -1,6 +1,6 @@
 // commands/closeall.js
 // Close ALL open tickets in the server. Owner/Co-owner/admins only. Asks for
-// confirmation, then gives each ticket a 5-minute warning (pinging the opener)
+// confirmation, then gives each ticket a 15-minute warning (pinging the opener)
 // before the sweeper closes them.
 
 import {
@@ -22,7 +22,7 @@ export default {
 
   data: new SlashCommandBuilder()
     .setName('closeall')
-    .setDescription('Close ALL open tickets (5-minute warning, owner/admin only).')
+    .setDescription('Close ALL open tickets (15-minute warning, owner/admin only).')
     .setDMPermission(false),
 
   async execute(interaction) {
@@ -52,8 +52,8 @@ export default {
       embeds: [
         Embeds.warning(
           'Close all tickets?',
-          `This will close **${open.length}** open ticket(s). Each opener gets a **5-minute warning** ` +
-            `ping, then the ticket is closed and deleted.`
+          `This will close **${open.length}** open ticket(s). Each opener gets a **15-minute warning** ` +
+            `ping with buttons to confirm closing or keep the ticket open.`
         ),
       ],
       components: [row],
@@ -83,18 +83,18 @@ export default {
     }
 
     await confirmation.update({
-      embeds: [Embeds.warning('Scheduling…', 'Posting 5-minute warnings in each ticket.')],
+      embeds: [Embeds.warning('Scheduling…', 'Posting 15-minute warnings in each ticket.')],
       components: [],
     });
 
     const count = await scheduleBulkClose(interaction.client, interaction.guildId);
-    await audit(interaction, 'Close All Tickets', `Scheduled **${count}** ticket(s) to close in 5 minutes.`);
+    await audit(interaction, 'Close All Tickets', `Scheduled **${count}** ticket(s) to close in 15 minutes.`);
 
     return interaction.editReply({
       embeds: [
         Embeds.success(
           'Tickets scheduled to close',
-          `**${count}** ticket(s) will close in **5 minutes**. Each opener has been pinged with a warning.`
+          `**${count}** ticket(s) will close in **15 minutes**. Each opener has been pinged with action buttons.`
         ),
       ],
     });

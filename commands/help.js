@@ -69,7 +69,7 @@ export default {
             '`/ticketautoclose` — Auto-close inactive tickets after N minutes\n' +
             '`/transcript` — Save a viewable HTML transcript of this ticket\n' +
             '`/close` — Close the current ticket (auto-saves a transcript)\n' +
-            '`/closeall` — Close all tickets (5-min warning, owner/admin)',
+            '`/closeall` — Close all tickets (15-min warning with confirm/keep-open buttons)',
         },
         {
           name: '🎉 Giveaways (Manage Server)',
