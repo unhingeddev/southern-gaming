@@ -138,6 +138,19 @@ db.exec(`
     PRIMARY KEY (giveaway_id, user_id),
     FOREIGN KEY (giveaway_id) REFERENCES giveaways(id) ON DELETE CASCADE
   );
+
+  -- Reusable rich-embed definitions. The JSON payload uses Discord's public
+  -- embed shape, which keeps the schema forward-compatible as builder options grow.
+  CREATE TABLE IF NOT EXISTS embed_templates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    name       TEXT NOT NULL COLLATE NOCASE,
+    data_json  TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    UNIQUE (guild_id, name)
+  );
 `);
 
 // ── Lightweight migrations ───────────────────────────────────────────────────
@@ -286,6 +299,16 @@ const stmts = {
   hasGiveawayEntry: db.prepare(`SELECT 1 AS hit FROM giveaway_entries WHERE giveaway_id = ? AND user_id = ?`),
   countGiveawayEntries: db.prepare(`SELECT COUNT(*) AS n FROM giveaway_entries WHERE giveaway_id = ?`),
   getGiveawayEntries: db.prepare(`SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?`),
+
+  saveEmbedTemplate: db.prepare(`
+    INSERT INTO embed_templates (guild_id, name, data_json, created_by) VALUES (?, ?, ?, ?)
+    ON CONFLICT(guild_id, name) DO UPDATE SET
+      data_json = excluded.data_json, created_by = excluded.created_by,
+      updated_at = strftime('%s','now')
+  `),
+  getEmbedTemplate: db.prepare(`SELECT * FROM embed_templates WHERE id = ? AND guild_id = ?`),
+  getEmbedTemplates: db.prepare(`SELECT * FROM embed_templates WHERE guild_id = ? ORDER BY name LIMIT 25`),
+  deleteEmbedTemplate: db.prepare(`DELETE FROM embed_templates WHERE id = ? AND guild_id = ?`),
 
   setEventLog: db.prepare(`
     INSERT INTO log_channels (guild_id, log_type, channel_id) VALUES (?, ?, ?)
@@ -543,6 +566,24 @@ export const Store = {
   /** Array of entrant user IDs. */
   getGiveawayEntries(giveawayId) {
     return stmts.getGiveawayEntries.all(giveawayId).map((r) => r.user_id);
+  },
+
+  // Reusable embed templates (guild-scoped).
+  saveEmbedTemplate(guildId, name, data, userId) {
+    stmts.saveEmbedTemplate.run(guildId, name, JSON.stringify(data), userId);
+  },
+  getEmbedTemplate(guildId, id) {
+    const row = stmts.getEmbedTemplate.get(id, guildId);
+    if (!row) return null;
+    try { return { ...row, data: JSON.parse(row.data_json) }; } catch { return null; }
+  },
+  getEmbedTemplates(guildId) {
+    return stmts.getEmbedTemplates.all(guildId).map((row) => {
+      try { return { ...row, data: JSON.parse(row.data_json) }; } catch { return { ...row, data: {} }; }
+    });
+  },
+  deleteEmbedTemplate(guildId, id) {
+    return stmts.deleteEmbedTemplate.run(id, guildId).changes > 0;
   },
 
   // ── Per-event log channels (leave|ban|kick|embed) ──────────────────────────

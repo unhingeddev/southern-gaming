@@ -33,7 +33,7 @@ export default {
     // the owning command's `modal` handler based on the customId prefix.
     if (interaction.isModalSubmit()) {
       const modalRoutes = {
-        'embed-modal:': 'embed',
+        'embed:': 'embed',
         'ticket-panel-modal:': 'ticketpanel',
       };
       const prefix = Object.keys(modalRoutes).find((p) => interaction.customId.startsWith(p));
@@ -53,6 +53,21 @@ export default {
             await interaction.reply(payload).catch(() => {});
           }
         }
+      }
+      return;
+    }
+
+    // Persistent embed-manager buttons/selects. State-changing sessions are
+    // user-bound; template data itself is persisted in SQLite.
+    if ((interaction.isButton() || interaction.isAnySelectMenu()) && interaction.customId.startsWith('embed:')) {
+      const cmd = interaction.client.commands.get('embed');
+      try {
+        await cmd?.component?.(interaction, ctx);
+      } catch (err) {
+        logger.error(`Error handling ${interaction.customId}:`, err.stack || err.message);
+        const payload = { embeds: [Embeds.error('Something went wrong', 'Could not process that embed action.')], flags: MessageFlags.Ephemeral };
+        if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => {});
+        else await interaction.reply(payload).catch(() => {});
       }
       return;
     }
