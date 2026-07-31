@@ -172,6 +172,12 @@ ensureColumn('tickets', 'last_activity', 'last_activity INTEGER');
 ensureColumn('tickets', 'close_at', 'close_at INTEGER');
 ensureColumn('tickets', 'close_kind', 'close_kind TEXT');
 ensureColumn('guild_settings', 'ticket_inactivity_minutes', 'ticket_inactivity_minutes INTEGER NOT NULL DEFAULT 0');
+// Older embed-manager prototypes used a smaller/different template table.
+// Bring those installs forward without deleting saved data or requiring a reset.
+ensureColumn('embed_templates', 'data_json', `data_json TEXT NOT NULL DEFAULT '{}'`);
+ensureColumn('embed_templates', 'created_by', `created_by TEXT NOT NULL DEFAULT ''`);
+ensureColumn('embed_templates', 'created_at', `created_at INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('embed_templates', 'updated_at', `updated_at INTEGER NOT NULL DEFAULT 0`);
 
 // ── Prepared statements ──────────────────────────────────────────────────────
 const stmts = {
