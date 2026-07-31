@@ -306,11 +306,12 @@ const stmts = {
   countGiveawayEntries: db.prepare(`SELECT COUNT(*) AS n FROM giveaway_entries WHERE giveaway_id = ?`),
   getGiveawayEntries: db.prepare(`SELECT user_id FROM giveaway_entries WHERE giveaway_id = ?`),
 
-  saveEmbedTemplate: db.prepare(`
+  updateEmbedTemplate: db.prepare(`
+    UPDATE embed_templates SET data_json = ?, created_by = ?, updated_at = strftime('%s','now')
+    WHERE guild_id = ? AND name = ? COLLATE NOCASE
+  `),
+  insertEmbedTemplate: db.prepare(`
     INSERT INTO embed_templates (guild_id, name, data_json, created_by) VALUES (?, ?, ?, ?)
-    ON CONFLICT(guild_id, name) DO UPDATE SET
-      data_json = excluded.data_json, created_by = excluded.created_by,
-      updated_at = strftime('%s','now')
   `),
   getEmbedTemplate: db.prepare(`SELECT * FROM embed_templates WHERE id = ? AND guild_id = ?`),
   getEmbedTemplates: db.prepare(`SELECT * FROM embed_templates WHERE guild_id = ? ORDER BY name LIMIT 25`),
@@ -576,7 +577,9 @@ export const Store = {
 
   // Reusable embed templates (guild-scoped).
   saveEmbedTemplate(guildId, name, data, userId) {
-    stmts.saveEmbedTemplate.run(guildId, name, JSON.stringify(data), userId);
+    const json = JSON.stringify(data);
+    const updated = stmts.updateEmbedTemplate.run(json, userId, guildId, name);
+    if (updated.changes === 0) stmts.insertEmbedTemplate.run(guildId, name, json, userId);
   },
   getEmbedTemplate(guildId, id) {
     const row = stmts.getEmbedTemplate.get(id, guildId);
