@@ -67,7 +67,11 @@ async function logToGuild(client, guildId, embed) {
 /** Actually close + delete a ticket channel. */
 async function performClose(client, ticket, channel) {
   Store.closeTicketByChannel(ticket.channel_id);
-  const why = ticket.close_kind === 'inactivity' ? 'inactivity' : 'bulk close';
+  const why = ticket.close_kind === 'inactivity'
+    ? 'inactivity'
+    : ticket.close_kind === 'manual'
+      ? (ticket.close_reason || 'manual close')
+      : 'bulk close';
   await channel
     .send({ embeds: [Embeds.warning('Ticket closing', `Closing now (${why}). This channel will be deleted.`)] })
     .catch(() => {});
@@ -82,6 +86,38 @@ async function performClose(client, ticket, channel) {
   );
   setTimeout(() => channel.delete(`Ticket auto-close: ${why}`).catch(() => {}), 3000);
   logger.info(`[${ticket.guild_id}] Auto-closed ticket #${ticket.number} (${why}).`);
+}
+
+/** Schedule one ticket for closure in 15 minutes using the persistent sweeper. */
+export async function scheduleManualClose(interaction, reason = 'No reason provided') {
+  const ticket = Store.getTicketByChannel(interaction.channelId);
+  if (!ticket || ticket.status !== 'open') {
+    return interaction.reply({
+      embeds: [Embeds.error('Not a ticket', 'This command only works inside an open ticket channel.')],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  if (!canDecide(interaction, ticket)) {
+    return interaction.reply({
+      embeds: [Embeds.error('Not allowed', 'Only the ticket opener or support staff can close this.')],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  const closeAt = nowSec() + WARN_SECONDS;
+  Store.scheduleTicketClose(ticket.channel_id, closeAt, 'manual', reason);
+  return interaction.reply({
+    content: `<@${ticket.opener_id}>`,
+    embeds: [
+      Embeds.warning(
+        'Ticket closing in 15 minutes',
+        `This ticket is scheduled to close <t:${closeAt}:R>.\n**Reason:** ${reason}\n\n` +
+          'Choose **Confirm Close** or **Keep Open** below.'
+      ),
+    ],
+    components: [closeDecisionButtons()],
+    allowedMentions: { users: [ticket.opener_id] },
+  });
 }
 
 /** Handle the persistent Confirm Close / Keep Open warning buttons. */

@@ -8,6 +8,7 @@ import { Store } from '../database/db.js';
 import Embeds from '../utils/embeds.js';
 import { runAutoMod } from '../automod/automod.js';
 import { maybeRespondAvailability } from '../services/availability.js';
+import { queueSticky } from '../services/stickies.js';
 
 export default {
   name: Events.MessageCreate,
@@ -18,6 +19,9 @@ export default {
 
     // 2) Availability auto-responder (when the owner is pinged).
     await maybeRespondAvailability(message, ctx);
+
+    // Debounced sticky reposting (one timer per configured channel).
+    queueSticky(message);
 
     // 3) Ticket activity tracking (existing behaviour).
     if (message.author?.bot || !message.guildId) return;

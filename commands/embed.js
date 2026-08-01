@@ -11,6 +11,7 @@ import logger from '../utils/logger.js';
 const sessions = new Map();
 const PREFIX = 'embed:';
 const EMPTY = { fields: [], timestamp: false };
+const MENTIONS = ['none', 'here', 'everyone'];
 
 export default {
   data: new SlashCommandBuilder()
@@ -49,6 +50,11 @@ export default {
     session.touched = Date.now();
     if (action === 'edit') return showEditModal(interaction, parts[1], parts[2]);
     if (action === 'toggle_timestamp') { session.data.timestamp = !session.data.timestamp; return refresh(interaction, session); }
+    if (action === 'toggle_mention') {
+      const current = MENTIONS.indexOf(session.data.mention || 'none');
+      session.data.mention = MENTIONS[(current + 1) % MENTIONS.length];
+      return refresh(interaction, session);
+    }
     if (action === 'remove_field') { session.data.fields.pop(); return refresh(interaction, session); }
     if (action === 'save') return showSaveModal(interaction, parts[1]);
     if (action === 'send') {
@@ -104,6 +110,7 @@ function builderPayload(s) {
       row(button(`edit:${id}:title`, 'Title'), button(`edit:${id}:description`, 'Description'), button(`edit:${id}:color`, 'Color')),
       row(button(`edit:${id}:media`, 'Image / Thumbnail'), button(`edit:${id}:author`, 'Author'), button(`edit:${id}:footer`, 'Footer')),
       row(button(`edit:${id}:field`, 'Add Field'), button(`remove_field:${id}`, 'Remove Field', ButtonStyle.Secondary, !d.fields.length), button(`toggle_timestamp:${id}`, `Timestamp: ${d.timestamp ? 'On' : 'Off'}`, ButtonStyle.Secondary)),
+      row(button(`toggle_mention:${id}`, `Hidden Ping: ${d.mention === 'here' ? '@here' : d.mention === 'everyone' ? '@everyone' : 'Off'}`, d.mention === 'none' ? ButtonStyle.Secondary : ButtonStyle.Primary)),
       row(button(`send:${id}`, s.targetMessageId ? 'Save Changes' : 'Send', ButtonStyle.Success), button(`save:${id}`, 'Save Template', ButtonStyle.Primary)),
     ],
   };
@@ -160,7 +167,8 @@ async function loadSentEmbed(i, channelId, messageId) {
   const channel = await i.guild.channels.fetch(channelId).catch(() => null);
   const message = await channel?.messages.fetch(messageId).catch(() => null);
   if (!message || message.author.id !== i.client.user.id || !message.embeds[0]) return fail(i, 'That embed message is no longer editable.');
-  const s = newSession(i, message.embeds[0].toJSON(), { targetChannelId: channelId, targetMessageId: messageId });
+  const mention = message.content.includes('@everyone') ? 'everyone' : message.content.includes('@here') ? 'here' : 'none';
+  const s = newSession(i, { ...message.embeds[0].toJSON(), mention }, { targetChannelId: channelId, targetMessageId: messageId });
   return i.update(builderPayload(s));
 }
 
@@ -173,11 +181,13 @@ async function sendOrEdit(i, s, selectedChannelId) {
   if (isEmpty(s.data)) return fail(i, 'Add some content before sending the embed.');
   try {
     const embed = makeEmbed(s.data, i);
+    const messageContent = mentionContent(s.data.mention);
+    const allowedMentions = s.data.mention === 'here' || s.data.mention === 'everyone' ? { parse: ['everyone'] } : { parse: [] };
     if (s.targetMessageId) {
       const message = await channel.messages.fetch(s.targetMessageId);
       if (message.author.id !== i.client.user.id) return fail(i, 'I can only edit messages sent by this bot.');
-      await message.edit({ embeds: [embed] });
-    } else await channel.send({ embeds: [embed] });
+      await message.edit({ content: messageContent, embeds: [embed], allowedMentions });
+    } else await channel.send({ content: messageContent, embeds: [embed], allowedMentions });
     sessions.delete(s.id);
     return i.update({ content: `${s.targetMessageId ? 'Updated' : 'Sent'} the embed in <#${channelId}> (channel ID: \`${channelId}\`).`, embeds: [], components: [] });
   } catch (err) {
@@ -215,8 +225,9 @@ function applyModal(i, d, kind) {
   else if (kind === 'field' && d.fields.length < 25) d.fields.push({ name: value(i, 'field_name'), value: value(i, 'field_value'), inline: /^y(es)?$/i.test(value(i, 'field_inline')) });
 }
 
-function normalize(raw = {}) { const d = structuredClone(raw); d.fields = Array.isArray(d.fields) ? d.fields.slice(0, 25) : []; d.timestamp = Boolean(d.timestamp); return d; }
-function makeEmbed(data, i) { const d = substitute(structuredClone(data), i); if (d.timestamp === true) d.timestamp = new Date().toISOString(); else delete d.timestamp; return EmbedBuilder.from(d); }
+function normalize(raw = {}) { const d = structuredClone(raw); d.fields = Array.isArray(d.fields) ? d.fields.slice(0, 25) : []; d.timestamp = Boolean(d.timestamp); d.mention = MENTIONS.includes(d.mention) ? d.mention : 'none'; return d; }
+function makeEmbed(data, i) { const d = substitute(structuredClone(data), i); delete d.mention; if (d.timestamp === true) d.timestamp = new Date().toISOString(); else delete d.timestamp; return EmbedBuilder.from(d); }
+function mentionContent(mention) { return mention === 'here' ? '|| @here ||' : mention === 'everyone' ? '|| @everyone ||' : null; }
 function substitute(v, i) { if (!i) return v; if (typeof v === 'string') return v.replaceAll('{server.name}', i.guild.name).replaceAll('{server.membercount}', String(i.guild.memberCount)).replaceAll('{server.icon}', i.guild.iconURL() || '').replaceAll('{bot.name}', i.client.user.username).replaceAll('{bot.icon}', i.client.user.displayAvatarURL()); if (Array.isArray(v)) return v.map(x => substitute(x, i)); if (v && typeof v === 'object') for (const k of Object.keys(v)) v[k] = substitute(v[k], i); return v; }
 function isEmpty(d) { return !d.title && !d.description && !d.author?.name && !d.footer?.text && !d.image?.url && !d.thumbnail?.url && !d.fields?.length; }
 function value(i, id) { return i.fields.getTextInputValue(id).replaceAll('\\n', '\n').trim(); }

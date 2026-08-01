@@ -24,6 +24,7 @@ const LABELS = {
   antiRaid: 'Anti-raid',
   accountAge: 'Account-age gate',
   advisory: 'Advisory nudges (no punishment)',
+  noImages: 'No Images',
 };
 
 const MODULE_CHOICES = TOGGLEABLE.map((m) => ({ name: LABELS[m] ?? m, value: m }));
@@ -47,6 +48,13 @@ export default {
         .addStringOption((o) => o.setName('module').setDescription('Which module').setRequired(true).addChoices(...MODULE_CHOICES))
         .addBooleanOption((o) => o.setName('enabled').setDescription('On/off — omit to flip current state'))
     )
+    .addSubcommand((s) => s.setName('no-images').setDescription('Configure image blocking and bypasses.')
+      .addStringOption((o) => o.setName('action').setDescription('Action').setRequired(true).addChoices(
+        { name: 'Enable', value: 'enable' }, { name: 'Disable', value: 'disable' },
+        { name: 'Add bypass role', value: 'add-role' }, { name: 'Remove bypass role', value: 'remove-role' },
+        { name: 'Add bypass channel', value: 'add-channel' }, { name: 'Remove bypass channel', value: 'remove-channel' }))
+      .addRoleOption((o) => o.setName('role').setDescription('Bypass role'))
+      .addChannelOption((o) => o.setName('channel').setDescription('Bypass channel')))
     .addSubcommand((s) => s.setName('status').setDescription('Show which modules are on/off.'))
     .addSubcommand((s) =>
       s
@@ -61,6 +69,18 @@ export default {
     if (!canModerate(interaction)) return denied(interaction);
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
+
+    if (sub === 'no-images') {
+      const action = interaction.options.getString('action', true);
+      if (action === 'enable' || action === 'disable') Store.setModule(guildId, 'noImages', action === 'enable');
+      else {
+        const kind = action.endsWith('role') ? 'role' : 'channel';
+        const target = kind === 'role' ? interaction.options.getRole('role') : interaction.options.getChannel('channel');
+        if (!target) return interaction.reply({ embeds: [Embeds.error('Missing selection', `Select a ${kind} for this action.`)], flags: MessageFlags.Ephemeral });
+        if (action.startsWith('add')) Store.addBypass(guildId, kind, target.id); else Store.removeBypass(guildId, kind, target.id);
+      }
+      return interaction.reply({ embeds: [Embeds.success('No Images updated', `Action **${action}** was applied.`)], flags: MessageFlags.Ephemeral });
+    }
 
     if (sub === 'status') {
       const lines = TOGGLEABLE.map((m) => {

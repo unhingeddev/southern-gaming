@@ -151,6 +151,19 @@ db.exec(`
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
     UNIQUE (guild_id, name)
   );
+
+  CREATE TABLE IF NOT EXISTS sticky_messages (
+    guild_id TEXT NOT NULL, channel_id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+    content TEXT, title TEXT, description TEXT, message_id TEXT,
+    delay_seconds INTEGER NOT NULL DEFAULT 4, created_by TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS lockdowns (
+    guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, role_id TEXT NOT NULL,
+    previous_json TEXT NOT NULL, reason TEXT, moderator_id TEXT NOT NULL,
+    unlock_at INTEGER, created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    PRIMARY KEY (channel_id, role_id)
+  );
 `);
 
 // ── Lightweight migrations ───────────────────────────────────────────────────
@@ -171,6 +184,7 @@ ensureColumn('tickets', 'ticket_type', 'ticket_type TEXT');
 ensureColumn('tickets', 'last_activity', 'last_activity INTEGER');
 ensureColumn('tickets', 'close_at', 'close_at INTEGER');
 ensureColumn('tickets', 'close_kind', 'close_kind TEXT');
+ensureColumn('tickets', 'close_reason', 'close_reason TEXT');
 ensureColumn('guild_settings', 'ticket_inactivity_minutes', 'ticket_inactivity_minutes INTEGER NOT NULL DEFAULT 0');
 // Older embed-manager prototypes used a smaller/different template table.
 // Bring those installs forward without deleting saved data or requiring a reset.
@@ -268,10 +282,10 @@ const stmts = {
   ),
   openTickets: db.prepare(`SELECT * FROM tickets WHERE status = 'open'`),
   scheduleClose: db.prepare(
-    `UPDATE tickets SET close_at = ?, close_kind = ? WHERE channel_id = ? AND status = 'open'`
+    `UPDATE tickets SET close_at = ?, close_kind = ?, close_reason = ? WHERE channel_id = ? AND status = 'open'`
   ),
   cancelClose: db.prepare(
-    `UPDATE tickets SET close_at = NULL, close_kind = NULL WHERE channel_id = ?`
+    `UPDATE tickets SET close_at = NULL, close_kind = NULL, close_reason = NULL WHERE channel_id = ?`
   ),
   setInactivity: db.prepare(
     `UPDATE guild_settings SET ticket_inactivity_minutes = ?, updated_at = strftime('%s','now') WHERE guild_id = ?`
@@ -344,6 +358,18 @@ const stmts = {
   getEventLog: db.prepare(`SELECT channel_id FROM log_channels WHERE guild_id = ? AND log_type = ?`),
   getAllEventLogs: db.prepare(`SELECT log_type, channel_id FROM log_channels WHERE guild_id = ?`),
   removeEventLog: db.prepare(`DELETE FROM log_channels WHERE guild_id = ? AND log_type = ?`),
+  upsertSticky: db.prepare(`INSERT INTO sticky_messages (guild_id, channel_id, kind, content, title, description, message_id, delay_seconds, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(channel_id) DO UPDATE SET kind=excluded.kind, content=excluded.content, title=excluded.title, description=excluded.description, message_id=excluded.message_id, delay_seconds=excluded.delay_seconds, created_by=excluded.created_by`),
+  getSticky: db.prepare(`SELECT * FROM sticky_messages WHERE channel_id = ?`),
+  listStickies: db.prepare(`SELECT * FROM sticky_messages WHERE guild_id = ? ORDER BY channel_id`),
+  allStickies: db.prepare(`SELECT * FROM sticky_messages`),
+  setStickyMessage: db.prepare(`UPDATE sticky_messages SET message_id = ? WHERE channel_id = ?`),
+  removeSticky: db.prepare(`DELETE FROM sticky_messages WHERE channel_id = ?`),
+  upsertLockdown: db.prepare(`INSERT INTO lockdowns (guild_id, channel_id, role_id, previous_json, reason, moderator_id, unlock_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(channel_id, role_id) DO UPDATE SET reason=excluded.reason, moderator_id=excluded.moderator_id, unlock_at=excluded.unlock_at`),
+  getLockdown: db.prepare(`SELECT * FROM lockdowns WHERE channel_id = ? AND role_id = ?`),
+  activeLockdowns: db.prepare(`SELECT * FROM lockdowns`),
+  removeLockdown: db.prepare(`DELETE FROM lockdowns WHERE channel_id = ? AND role_id = ?`),
 };
 
 /** Ensure a guild row exists, then return it. */
@@ -488,8 +514,8 @@ export const Store = {
     return stmts.openTickets.all();
   },
   /** Schedule a ticket to close at `closeAt` (unix secs) for the given reason. */
-  scheduleTicketClose(channelId, closeAt, kind) {
-    stmts.scheduleClose.run(closeAt, kind, channelId);
+  scheduleTicketClose(channelId, closeAt, kind, reason = null) {
+    stmts.scheduleClose.run(closeAt, kind, reason, channelId);
   },
   /** Cancel a pending scheduled close (e.g. activity resumed). */
   cancelTicketClose(channelId) {
@@ -635,6 +661,16 @@ export const Store = {
   removeEventLog(guildId, type) {
     return stmts.removeEventLog.run(guildId, type).changes > 0;
   },
+  saveSticky(s) { stmts.upsertSticky.run(s.guildId, s.channelId, s.kind, s.content ?? null, s.title ?? null, s.description ?? null, s.messageId ?? null, s.delaySeconds ?? 4, s.createdBy); },
+  getSticky(channelId) { return stmts.getSticky.get(channelId) ?? null; },
+  getGuildStickies(guildId) { return stmts.listStickies.all(guildId); },
+  getAllStickies() { return stmts.allStickies.all(); },
+  setStickyMessageId(channelId, messageId) { stmts.setStickyMessage.run(messageId, channelId); },
+  removeSticky(channelId) { return stmts.removeSticky.run(channelId).changes > 0; },
+  saveLockdown(l) { stmts.upsertLockdown.run(l.guildId, l.channelId, l.roleId, JSON.stringify(l.previous), l.reason ?? null, l.moderatorId, l.unlockAt ?? null); },
+  getLockdown(channelId, roleId) { return stmts.getLockdown.get(channelId, roleId) ?? null; },
+  getActiveLockdowns() { return stmts.activeLockdowns.all(); },
+  removeLockdown(channelId, roleId) { return stmts.removeLockdown.run(channelId, roleId).changes > 0; },
 };
 
 /** Gracefully close the DB (call on shutdown). */

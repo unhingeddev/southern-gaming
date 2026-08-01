@@ -6,6 +6,7 @@
 
 import { PermissionFlagsBits } from 'discord.js';
 import config from './config.js';
+import { Store as MainStore } from '../database/db.js';
 
 const gate = config.defaults.gate ?? { roleNames: [], roleIds: [] };
 const NAME_SET = new Set((gate.roleNames ?? []).map((n) => n.toLowerCase()));
@@ -16,6 +17,8 @@ export function canModerate(interaction) {
   const perms = interaction.memberPermissions;
   if (perms?.has(PermissionFlagsBits.Administrator)) return true;
   if (perms?.has(PermissionFlagsBits.ManageGuild)) return true;
+  const manager = MainStore.getNamedRoles(interaction.guildId).automod_manager;
+  if (manager && interaction.member?.roles?.cache?.has(manager)) return true;
   const roles = interaction.member?.roles?.cache;
   if (!roles) return false;
   return roles.some((role) => ID_SET.has(role.id) || NAME_SET.has(role.name.toLowerCase()));

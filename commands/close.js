@@ -3,7 +3,7 @@
 // support member. Delegates to the shared ticket service.
 
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { closeTicket } from '../services/tickets.js';
+import { scheduleManualClose } from '../services/ticketSweeper.js';
 import { Store } from '../database/db.js';
 import Embeds from '../utils/embeds.js';
 
@@ -23,6 +23,6 @@ export default {
       });
     }
     const reason = interaction.options.getString('reason')?.trim() || 'No reason provided';
-    return closeTicket(interaction, reason);
+    return scheduleManualClose(interaction, reason);
   },
 };

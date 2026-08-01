@@ -74,6 +74,11 @@ db.exec(`
     PRIMARY KEY (guild_id, domain)
   );
 
+  CREATE TABLE IF NOT EXISTS automod_bypasses (
+    guild_id TEXT NOT NULL, kind TEXT NOT NULL, target_id TEXT NOT NULL,
+    PRIMARY KEY (guild_id, kind, target_id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_history_user ON strike_history (guild_id, user_id, created_at DESC);
 `);
 
@@ -136,6 +141,9 @@ const stmts = {
   addAllow: db.prepare(`INSERT OR IGNORE INTO allowlist (guild_id, domain, added_by) VALUES (?, ?, ?)`),
   removeAllow: db.prepare(`DELETE FROM allowlist WHERE guild_id = ? AND domain = ?`),
   listAllow: db.prepare(`SELECT domain FROM allowlist WHERE guild_id = ? ORDER BY domain ASC`),
+  addBypass: db.prepare(`INSERT OR IGNORE INTO automod_bypasses (guild_id, kind, target_id) VALUES (?, ?, ?)`),
+  removeBypass: db.prepare(`DELETE FROM automod_bypasses WHERE guild_id = ? AND kind = ? AND target_id = ?`),
+  listBypass: db.prepare(`SELECT target_id FROM automod_bypasses WHERE guild_id = ? AND kind = ?`),
 
   kvGet: db.prepare(`SELECT value FROM kv WHERE key = ?`),
   kvSet: db.prepare(`INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
@@ -222,6 +230,9 @@ export const Store = {
   listAllowDomains(guildId) {
     return stmts.listAllow.all(guildId).map((r) => r.domain);
   },
+  addBypass(guildId, kind, targetId) { stmts.addBypass.run(guildId, kind, targetId); },
+  removeBypass(guildId, kind, targetId) { return stmts.removeBypass.run(guildId, kind, targetId).changes > 0; },
+  listBypasses(guildId, kind) { return stmts.listBypass.all(guildId, kind).map((r) => r.target_id); },
 
   getRaidState(guildId) {
     const g = ensureGuild(guildId);

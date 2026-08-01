@@ -9,6 +9,8 @@ import { startAutomation } from '../services/automation.js';
 import { startStatusRotation } from '../services/statusRotator.js';
 import { startTicketSweeper } from '../services/ticketSweeper.js';
 import { startGiveawaySweeper } from '../services/giveawaySweeper.js';
+import { startLockdownSweeper } from '../services/lockdowns.js';
+import { validateStickies } from '../services/stickies.js';
 
 export default {
   name: Events.ClientReady,
@@ -37,6 +39,8 @@ export default {
 
     // Sweeper that ends giveaways when their timer runs out.
     startGiveawaySweeper(client);
+    startLockdownSweeper(client);
+    void validateStickies(client);
     void ctx;
   },
 };

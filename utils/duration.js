@@ -19,11 +19,13 @@ const UNIT_SECONDS = {
  */
 export function parseDuration(input) {
   if (!input || typeof input !== 'string') return null;
+  const normalized = input.trim();
+  if (!/^(?:\d+\s*[smhdw]\s*)+$/i.test(normalized)) return null;
   const re = /(\d+)\s*([smhdw])/gi;
   let total = 0;
   let matched = false;
   let m;
-  while ((m = re.exec(input)) !== null) {
+  while ((m = re.exec(normalized)) !== null) {
     matched = true;
     total += parseInt(m[1], 10) * UNIT_SECONDS[m[2].toLowerCase()];
   }

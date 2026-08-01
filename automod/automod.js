@@ -10,6 +10,8 @@ import { Store } from './db.js';
 import logger from '../utils/logger.js';
 import { isImmune } from './permissions.js';
 import { applyStrike, sendTestWarning } from './strikeSystem.js';
+import { buildModEmbed, sendModLog } from './modLog.js';
+import { detectImage } from './imageFilter.js';
 
 import { checkWordFilter, checkSolicitation } from './wordFilter.js';
 import { checkSplitWord } from './splitFilter.js';
@@ -38,7 +40,7 @@ const CHECKS = [
 ];
 
 // Deduped (checkWordFilter + checkSplitWord share the 'wordFilter' toggle).
-export const TOGGLEABLE = [...new Set([...CHECKS.map((c) => c.module), 'antiRaid', 'accountAge', 'advisory'])];
+export const TOGGLEABLE = [...new Set([...CHECKS.map((c) => c.module), 'antiRaid', 'accountAge', 'advisory', 'noImages'])];
 
 export async function runAutoMod(message, ctx) {
   if (!message.guild) return;
@@ -48,6 +50,24 @@ export async function runAutoMod(message, ctx) {
   const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   const immune = !!(member && isImmune(member));
   const testMode = Store.getTestMode(message.guildId);
+
+  if (!immune && Store.isModuleEnabled(message.guildId, 'noImages', MODS.noImages)) {
+    const roleBypasses = new Set(Store.listBypasses(message.guildId, 'role'));
+    const channelBypasses = new Set(Store.listBypasses(message.guildId, 'channel'));
+    const bypassed = channelBypasses.has(message.channelId) || member?.roles?.cache?.some((r) => roleBypasses.has(r.id));
+    const image = !bypassed ? detectImage(message) : null;
+    if (image) {
+      const captured = message.content?.trim() || image.name;
+      let deleted = false;
+      try { if (message.deletable) { await message.delete(); deleted = true; } } catch (err) { logger.warn(`[automod][${message.guildId}] Image delete failed: ${err.message}`); }
+      if (deleted) {
+        const warning = await message.channel.send({ content: `<@${message.author.id}>, images are disabled in this channel.`, allowedMentions: { users: [message.author.id] } }).catch(() => null);
+        if (warning) setTimeout(() => warning.delete().catch(() => {}), 5000);
+      }
+      await sendModLog(ctx.client, message.guildId, buildModEmbed({ action: 'info', user: message.author, rule: 'No Images', reason: deleted ? `Deleted image: ${image.name}` : `Detected image but could not delete: ${image.name}`, content: captured, channelId: message.channelId, moderator: 'Auto-Mod', note: new Date().toISOString() }));
+      return;
+    }
+  }
 
   // Punitive checks; first violation wins. Test mode also runs them for immune
   // members so staff can test detection on themselves.

@@ -14,6 +14,8 @@ import { stopTicketSweeper } from './services/ticketSweeper.js';
 import { stopGiveawaySweeper } from './services/giveawaySweeper.js';
 import { startStrikeDecay, stopStrikeDecay } from './automod/decay.js';
 import { closeAutomodDatabase } from './automod/db.js';
+import { stopLockdownSweeper } from './services/lockdowns.js';
+import { stopStickies } from './services/stickies.js';
 
 // Base (non-privileged) intents the bot always uses.
 // GuildModeration lets the bot receive ban events for the logging system.
@@ -105,6 +107,8 @@ function shutdown(signal) {
   stopTicketSweeper();
   stopGiveawaySweeper();
   stopStrikeDecay();
+  stopLockdownSweeper();
+  stopStickies();
   closeDatabase();
   closeAutomodDatabase();
   client?.destroy();

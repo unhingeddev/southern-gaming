@@ -57,10 +57,10 @@ export default {
         .addStringOption((o) =>
           o
             .setName('mode')
-            .setDescription('auto = work-hours aware (default)')
+            .setDescription('auto = scheduled availability hours (default)')
             .setRequired(true)
             .addChoices(
-              { name: 'auto (work-hours aware)', value: 'auto' },
+              { name: 'auto (scheduled hours)', value: 'auto' },
               { name: 'available (force green)', value: 'available' },
               { name: 'away (force red)', value: 'away' }
             )
@@ -153,7 +153,7 @@ export default {
     const mode = interaction.options.getString('mode', true);
     setMode(mode);
     return interaction.reply({
-      embeds: [Embeds.success('Mode set', `Availability mode is now **${mode}**.`)],
+      embeds: [Embeds.success('Mode set', `Availability mode is now **${mode}**.${mode === 'auto' ? '' : ' This manual override will reset at the next scheduled availability change.'}`)],
       flags: MessageFlags.Ephemeral,
     });
   },

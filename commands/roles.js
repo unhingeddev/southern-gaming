@@ -14,9 +14,12 @@ const ROLE_TYPES = [
   { name: 'Staff', value: 'staff' },
   { name: 'Buyers', value: 'buyers' },
   { name: 'Members', value: 'members' },
+  { name: 'AutoMod manager', value: 'automod_manager' },
+  { name: 'Lockdown manager', value: 'lockdown_manager' },
+  { name: 'Sticky manager', value: 'sticky_manager' },
 ];
 
-const LABELS = { owner: 'Owner', coowner: 'Co-owner', staff: 'Staff', buyers: 'Buyers', members: 'Members' };
+const LABELS = Object.fromEntries(ROLE_TYPES.map((r) => [r.value, r.name]));
 
 export default {
   data: new SlashCommandBuilder()

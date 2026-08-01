@@ -14,6 +14,7 @@
     "deploy:all": "node deploy-commands.js --all",
     "clear:global": "node deploy-commands.js --clear --global",
     "dev": "node --watch index.js"
+    ,"test": "node --test"
   },
   "keywords": [
     "discord",

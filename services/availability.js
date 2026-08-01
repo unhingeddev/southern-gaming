@@ -25,7 +25,6 @@ import { COLORS } from '../utils/embeds.js';
 import logger from '../utils/logger.js';
 
 const A = config.defaults.availability ?? {};
-const ORANGE = COLORS.timeout ?? 0xe67e22;
 const DEFAULT_WH = { days: [1, 2, 3, 4, 5], startHour: 8, endHour: 18 };
 const DAY_MAP = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
@@ -69,16 +68,18 @@ function dayKey(person, d = new Date()) {
 }
 
 /** Current weekday (0–6) and hour (0–23) in a person's timezone. */
-function zonedNow(person) {
+function zonedNow(person, date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: person.timezone,
     hour12: false,
     weekday: 'short',
     hour: '2-digit',
-  }).formatToParts(new Date());
+    minute: '2-digit',
+  }).formatToParts(date);
   const weekday = parts.find((p) => p.type === 'weekday')?.value;
   const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10) % 24;
-  return { dow: DAY_MAP[weekday] ?? new Date().getDay(), hour };
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  return { dow: DAY_MAP[weekday] ?? date.getDay(), hour, minute };
 }
 
 /** Pretty current-time string in a person's timezone. */
@@ -96,8 +97,8 @@ function prettyNow(person) {
   }).format(new Date());
 }
 
-function isWorkHours(person) {
-  const { dow, hour } = zonedNow(person);
+function isWorkHours(person, date = new Date()) {
+  const { dow, hour } = zonedNow(person, date);
   const wh = person.workHours || DEFAULT_WH;
   return wh.days.includes(dow) && hour >= wh.startHour && hour < wh.endHour;
 }
@@ -122,13 +123,13 @@ export function buildAvailabilityEmbed(person, mode = 'auto') {
     status = '🟢 Available';
     footer = 'Manually set to available';
   } else if (isWorkHours(person)) {
-    color = ORANGE;
-    status = '🟡 Currently at work – available sometimes';
-    footer = `Work hours: ${person.workHoursLabel}`;
-  } else {
     color = COLORS.success;
-    status = '🟢 Should be available';
-    footer = 'Outside work hours';
+    status = '🟢 Available';
+    footer = `Automatic hours: ${person.workHoursLabel}`;
+  } else {
+    color = COLORS.danger;
+    status = '🔴 Currently away';
+    footer = `Outside automatic hours: ${person.workHoursLabel}`;
   }
 
   if (person.timezone) footer += ` • ${person.timezone}`;
@@ -146,7 +147,14 @@ export function buildAvailabilityEmbed(person, mode = 'auto') {
 
 /** Current mode from persistent state (default 'auto'). */
 function currentMode() {
-  return Store.kvGet('avail:mode', 'auto');
+  const mode = Store.kvGet('avail:mode', 'auto');
+  const until = Number(Store.kvGet('avail:mode_until', '0'));
+  if (mode !== 'auto' && (!until || Date.now() >= until)) {
+    Store.kvSet('avail:mode', 'auto');
+    Store.kvSet('avail:mode_until', '0');
+    return 'auto';
+  }
+  return mode;
 }
 
 /** Is the responder enabled? (persistent, default from config). */
@@ -160,6 +168,19 @@ export function setEnabled(on) {
 
 export function setMode(mode) {
   Store.kvSet('avail:mode', mode);
+  Store.kvSet('avail:mode_until', mode === 'auto' ? '0' : String(nextScheduleBoundary(PEOPLE[0])));
+}
+
+/** Manual overrides last until the next automatic available/away transition. */
+function nextScheduleBoundary(person) {
+  if (!person) return Date.now() + 24 * 60 * 60_000;
+  const current = isWorkHours(person);
+  const start = Date.now();
+  for (let minutes = 1; minutes <= 8 * 24 * 60; minutes += 1) {
+    const candidate = new Date(start + minutes * 60_000);
+    if (isWorkHours(person, candidate) !== current) return candidate.getTime();
+  }
+  return start + 24 * 60 * 60_000;
 }
 
 export function getMode() {
