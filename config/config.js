@@ -79,8 +79,8 @@ const config = {
     commandCooldownSeconds: int('COMMAND_COOLDOWN_SECONDS', 3),
     statusRotateSeconds: int('STATUS_ROTATE_SECONDS', 30),
     logLevel: optional('LOG_LEVEL', 'info'),
-    // Auto-register slash commands to a server the moment the bot is added to it,
-    // so adding the bot to more servers needs no manual deploy. Turn this OFF
+    // Auto-register slash commands at startup and when the bot joins a server,
+    // so code updates never need a separate manual deploy. Turn this OFF
     // (AUTO_REGISTER_ON_JOIN=false) if you register commands globally instead,
     // to avoid commands appearing twice.
     autoRegisterOnJoin: bool('AUTO_REGISTER_ON_JOIN', true),
