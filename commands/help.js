@@ -38,6 +38,8 @@ export default {
           value:
             '`/vouch` — Leave a vouch/review (posts a card to the vouch channel)\n' +
             '`/vouches` — Show latest reviews\n' +
+            '`/sticky create` — Keep a message at the bottom of a channel\n' +
+            '`/sticky off` — Turn off the sticky in this or a selected channel\n' +
             '`/recentpurchases` — Show recent orders\n' +
             '`/status` — Show config & connection (admin)\n' +
             '`/reload` — Reload commands (admin)\n' +

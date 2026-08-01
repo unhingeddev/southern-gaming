@@ -8,6 +8,7 @@ import { clientForGuild, SellAuthError } from './sellauth.js';
 import Embeds from '../utils/embeds.js';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
+import { queueStickyForChannel } from './stickies.js';
 
 let timer = null;
 let running = false; // guards against overlapping polls if one run is slow
@@ -54,8 +55,9 @@ async function processGuildKind(client, guild, kind) {
     if (Store.hasPosted(guild.guild_id, kind, item.id)) continue;
     try {
       const embed = kind === 'vouch' ? Embeds.vouch(item) : Embeds.purchase(item);
-      await channel.send({ embeds: [embed] });
+      const postedMessage = await channel.send({ embeds: [embed] });
       Store.markPosted(guild.guild_id, kind, item.id);
+      if (kind === 'vouch') queueStickyForChannel(channel, postedMessage.id);
       logger.info(`[${guild.guild_id}] Posted ${kind} ${item.id}.`);
     } catch (err) {
       logger.error(`[${guild.guild_id}] Failed to post ${kind} ${item.id}: ${err.message}`);

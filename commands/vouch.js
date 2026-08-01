@@ -7,6 +7,7 @@ import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { Store } from '../database/db.js';
 import Embeds from '../utils/embeds.js';
 import logger from '../utils/logger.js';
+import { queueStickyForChannel } from '../services/stickies.js';
 
 export default {
   // A longer cooldown since this posts publicly.
@@ -79,8 +80,9 @@ export default {
       imageUrl,
     });
 
+    let postedMessage;
     try {
-      await channel.send({ embeds: [embed] });
+      postedMessage = await channel.send({ embeds: [embed] });
     } catch (err) {
       logger.error(`Failed to post /vouch to ${channel?.id}: ${err.message}`);
       return interaction.reply({
@@ -93,6 +95,10 @@ export default {
         flags: MessageFlags.Ephemeral,
       });
     }
+
+    // Bot-authored messages are normally ignored by sticky handling to avoid
+    // loops, so explicitly bump a configured sticky after a successful vouch.
+    queueStickyForChannel(channel, postedMessage.id);
 
     logger.info(`Vouch submitted by ${interaction.user.tag} for "${product}" (${rating}★).`);
     return interaction.reply({
