@@ -6,24 +6,41 @@ import {
 } from 'discord.js';
 import { Store } from '../database/db.js';
 import Embeds, { COLORS } from '../utils/embeds.js';
+import { audit } from '../utils/audit.js';
+import { sendEventLog } from '../utils/eventLog.js';
 import logger from '../utils/logger.js';
 
 const sessions = new Map();
 const PREFIX = 'embed:';
 const EMPTY = { fields: [], timestamp: false };
 const MENTIONS = ['none', 'here', 'everyone'];
+const REGULAR_PINGS = {
+  here: '@here',
+  everyone: '@everyone',
+  here_spoiler: '|| @here ||',
+  everyone_spoiler: '|| @everyone ||',
+};
 
 export default {
   data: new SlashCommandBuilder()
     .setName('embed').setDescription('Create and manage rich embeds.')
     .setDMPermission(false).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addSubcommand(s => s.setName('new').setDescription('Open the interactive embed builder.'))
+    .addSubcommand(s => s.setName('regular').setDescription('Send an embed with the simple modal.')
+      .addChannelOption(o => o.setName('channel').setDescription('Channel to send to (defaults to here)').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+      .addStringOption(o => o.setName('ping').setDescription('Optional ping above the embed').addChoices(
+        { name: '@here', value: 'here' },
+        { name: '@everyone', value: 'everyone' },
+        { name: '@here (spoiler)', value: 'here_spoiler' },
+        { name: '@everyone (spoiler)', value: 'everyone_spoiler' },
+      )))
     .addSubcommand(s => s.setName('list').setDescription('Edit a saved template or an embed already sent.'))
     .addSubcommand(s => s.setName('send').setDescription('Quickly send a saved template.')),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === 'new') return openBuilder(interaction, structuredClone(EMPTY));
+    if (sub === 'regular') return showRegularModal(interaction);
     if (sub === 'list') return interaction.reply({
       content: 'Select a template or a sent embed to edit.',
       components: [row(button('list_templates', 'Edit a Saved Template', ButtonStyle.Primary), button('list_sent', 'Edit a Sent Embed', ButtonStyle.Secondary))],
@@ -66,6 +83,7 @@ export default {
 
   async modal(interaction) {
     const [, action, sid] = interaction.customId.split(':');
+    if (action === 'regular_modal') return sendRegularEmbed(interaction, sid, interaction.customId.split(':')[3]);
     const session = sessions.get(sid);
     if (!session || session.userId !== interaction.user.id) return fail(interaction, 'This builder expired.');
     if (action === 'save_modal') {
@@ -81,6 +99,65 @@ export default {
     return interaction.update(builderPayload(session));
   },
 };
+
+async function showRegularModal(interaction) {
+  const target = interaction.options.getChannel('channel') ?? interaction.channel;
+  const ping = interaction.options.getString('ping') ?? '';
+  const perms = target.permissionsFor(interaction.guild.members.me);
+  if (!perms?.has([PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+    return fail(interaction, `I need **Send Messages** and **Embed Links** in <#${target.id}>.`);
+  }
+
+  const modal = new ModalBuilder().setCustomId(`${PREFIX}regular_modal:${target.id}:${ping}`).setTitle('Send a regular embed');
+  const input = (id, label, style, max, required = false, placeholder) => {
+    const field = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setMaxLength(max).setRequired(required);
+    if (placeholder) field.setPlaceholder(placeholder);
+    return row(field);
+  };
+  modal.addComponents(
+    input('title', 'Title (optional)', TextInputStyle.Short, 256),
+    input('description', 'Description — Enter adds paragraphs', TextInputStyle.Paragraph, 4000, true, 'Line one.\n\nA second paragraph.'),
+    input('color', 'Color hex (optional, e.g. #5865F2)', TextInputStyle.Short, 7),
+    input('footer', 'Footer text (optional)', TextInputStyle.Short, 2048),
+    input('image', 'Image URL (optional)', TextInputStyle.Short, 1000),
+  );
+  return interaction.showModal(modal);
+}
+
+async function sendRegularEmbed(interaction, channelId, pingKey = '') {
+  if (!interaction.inGuild() || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
+    return fail(interaction, 'You need **Manage Messages** to send embeds.');
+  }
+  const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) return fail(interaction, 'That channel is unavailable.');
+  if (!channel.permissionsFor(interaction.guild.members.me)?.has([PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+    return fail(interaction, `I need **Send Messages** and **Embed Links** in <#${channelId}>.`);
+  }
+
+  const title = value(interaction, 'title');
+  const description = value(interaction, 'description');
+  const color = value(interaction, 'color');
+  const footer = value(interaction, 'footer');
+  const image = value(interaction, 'image');
+  if (image && !url(image)) return fail(interaction, 'The image must be a valid HTTP(S) URL.');
+
+  const embed = new EmbedBuilder().setDescription(description.slice(0, 4096)).setColor(parseColor(color)).setTimestamp();
+  if (title) embed.setTitle(title.slice(0, 256));
+  if (footer) embed.setFooter({ text: footer.slice(0, 2048) });
+  if (image) embed.setImage(image);
+  const content = REGULAR_PINGS[pingKey] ?? '';
+
+  try {
+    await channel.send({ content: content || undefined, embeds: [embed], allowedMentions: content ? { parse: ['everyone'] } : { parse: [] } });
+  } catch (err) {
+    logger.error(`Regular embed send failed: ${err.stack || err.message}`);
+    return fail(interaction, `Discord rejected the embed: ${err.message}`);
+  }
+
+  await audit(interaction, 'Embed Sent', `A regular embed was sent to <#${channelId}>${title ? ` (titled “${title}”)` : ''}.`);
+  await sendEventLog(interaction.client, interaction.guildId, 'embed', Embeds.info('Embed sent', `By <@${interaction.user.id}> in <#${channelId}>${title ? `\n**Title:** ${title}` : ''}`));
+  return interaction.reply({ embeds: [Embeds.success('Embed sent', `Posted to <#${channelId}>.${content ? `\nWith ping: ${content}` : ''}`)], flags: MessageFlags.Ephemeral });
+}
 
 function newSession(interaction, data, extra = {}) {
   cleanup();
@@ -234,6 +311,7 @@ function value(i, id) { return i.fields.getTextInputValue(id).replaceAll('\\n', 
 function setOrDelete(o, k, v) { if (v) o[k] = v; else delete o[k]; }
 function setNestedUrl(o, k, v) { if (url(v)) o[k] = { url: v }; else delete o[k]; }
 function url(v) { try { return ['http:', 'https:'].includes(new URL(v).protocol); } catch { return false; } }
+function parseColor(raw) { const hex = raw.replace(/^#/, ''); return /^[\da-f]{6}$/i.test(hex) ? parseInt(hex, 16) : COLORS.brand; }
 function cleanup() { const cutoff = Date.now() - 30 * 60_000; for (const [id, s] of sessions) if (s.touched < cutoff) sessions.delete(id); }
 async function fail(i, text) { const payload = { embeds: [Embeds.error('Embed manager', text)], components: [], flags: MessageFlags.Ephemeral }; return i.replied || i.deferred ? i.followUp(payload) : i.reply(payload); }
 
